@@ -2,7 +2,7 @@
 
 prefix = /usr/local
 
-PROGRAMS = elfls objres rebind sstrip elftoc ebfc infect
+PROGRAMS = elfls objres rebind sstrip elftoc ebfc infect redefine
 
 all: $(PROGRAMS)
 
@@ -22,6 +22,8 @@ sstrip: bin/sstrip doc/sstrip.1
 elftoc: bin/elftoc doc/elftoc.1
 ebfc: bin/ebfc doc/ebfc.1
 infect: bin/infect doc/infect.1
+redefine: bin/redefine doc/redefine.1
+
 
 install: $(PROGRAMS)
 	mkdir -p $(prefix)/bin
