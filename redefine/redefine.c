@@ -29,6 +29,7 @@ static char const *yowzitch =
 "Change the name of dynamic symbols in an ELF object file.\n\n"
 "  -n, --name=ORGNAME    the part name to be replace.\n"
 "  -p, --replace_name=NEWNAME the new part name.\n"
+"  -r, --rehash          Force rehash even if no symbol was changed.\n"
 "  -i, --verbose         Describe some debug information.\n"
 "      --help            Display this help and exit.\n"
 "      --version         Display version information and exit.\n\n";
@@ -43,6 +44,7 @@ static char const *vourzhon =
 "There is NO WARRANTY, to the extent permitted by law.\n";
 
 static int		verbose;	/* whether to tell the user */
+static int      force_hash = 0; /* whether force hash when no symbol was change */
 
 static char	      *seek_name_part = 0;	/* the list of symbol names to seek */
 static char	      *replace_name_part = 0;	/* the list of symbol names to replace to */
@@ -148,7 +150,7 @@ static int changestrtabs(char* strtab, int count)
 
 // 根据符号表信息重新生成.hash区域内容。注意的是symtab中不包含elf第一个空符号，仅包括有效符号
 // strtab是elf中原始文件内容，count是symtab中包含的符号个数
-static int rehash(Elf64_Shdr *shdrs, Elf64_Sym *symtab, const char* strtab, int count)
+static int rehash(Elf64_Shdr *shdrs, Elf64_Sym *symtab, const char* strtab, int count, int sh_info)
 {
 	// hash区起始内存
 	Elf32_Word		    *chain = malloc(1024);
@@ -189,7 +191,7 @@ static int rehash(Elf64_Shdr *shdrs, Elf64_Sym *symtab, const char* strtab, int 
 		// use orignal bucket num
         bucketnum = modify_chain[0];
 		// use new sym count
-		modify_chain[1] = count + 1;
+		modify_chain[1] = count + sh_info;
 
 		chain += 2 + bucketnum; // jump to chain list
 		memset(modify_chain + 2, 0, shdrs[i].sh_size * 2 - 2 * sizeof(chain[0]));// empty bukkets and chains
@@ -210,7 +212,7 @@ static int rehash(Elf64_Shdr *shdrs, Elf64_Sym *symtab, const char* strtab, int 
 			n = hash - bucketnum;//< this step n is negtive, so n is a bukket index,but chain[n] is chain index
 			while (chain[n])
 				n = chain[n];
-			chain[n] = j + 1;
+			chain[n] = j + sh_info;
 		}
 
 		// HEX格式输出修改后的hash表
@@ -256,7 +258,7 @@ static int redefine(void)
 		return err("invalid section header table.");
 	for (i = 0; i < ehdr.e_shnum; ++i)
 	{
-		if (shdrs[i].sh_type != SHT_SYMTAB && shdrs[i].sh_type != SHT_DYNSYM)
+		if (shdrs[i].sh_type != SHT_DYNSYM)
 			continue;
 
 		if (shdrs[i].sh_entsize != sizeof(Elf32_Sym) &&
@@ -285,12 +287,12 @@ static int redefine(void)
 			changed = TRUE;
 			if (fseek(thefile, shdrs[shdrs[i].sh_link].sh_offset, SEEK_SET) || fwrite(strtab, n, 1, thefile) != 1) return err("invalid write string table");
 		}
-		break;
-	}
 
-	if (changed)
-	{
-		rehash(shdrs, symtab, strtab, count);
+		if (changed || force_hash)
+        {
+            rehash(shdrs, symtab, strtab, count, shdrs[i].sh_info);
+        }
+		break;
 	}
 
 	if (verbose && !changed)
@@ -306,11 +308,12 @@ static int redefine(void)
  */
 static void readcmdline(int argc, char *argv[])
 {
-	static char const *optstring = "n:ip:";
+	static char const *optstring = "n:ip:r";
 	static struct option const options[] = {
 	{ "name", required_argument, 0, 'n' },
 	{ "replace_name", required_argument, 0, 'p' },
 	{ "verbose", no_argument, 0, 'i' },
+	{ "rehash", no_argument, 0, 'r' },
 	{ "help", no_argument, 0, 'H' },
 	{ "version", no_argument, 0, 'V' },
 	{ 0, 0, 0, 0 }
@@ -341,6 +344,9 @@ static void readcmdline(int argc, char *argv[])
 			break;
 		case 'i':
 			verbose = TRUE;
+			break;
+		case 'r':
+			force_hash = TRUE;
 			break;
 		case 'H':
 			fputs(yowzitch, stdout);
